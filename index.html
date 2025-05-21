@@ -152,6 +152,7 @@
       myRes.push({ date: selectedDate, type, time: '19:00' });
       localStorage.setItem(key, JSON.stringify(myRes));
 
+      registerToFirebase(name, type, selectedDate); // 🔥 Firebaseに保存！
       showPopup("予約できました！楽しみにしてます✨");
       showMyReservations(name);
       renderCalendars();
@@ -194,6 +195,37 @@
       loadTypeFromMemory();
       renderCalendars();
     };
+  </script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC3pcdWqFwrvokCUyGGJlg_ruQ-6wUSZT8",
+      authDomain: "tsta-reserve.firebaseapp.com",
+      projectId: "tsta-reserve",
+      storageBucket: "tsta-reserve.firebasestorage.app",
+      messagingSenderId: "242251329752",
+      appId: "1:242251329752:web:f70718703ba8e35298a7ad"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function registerToFirebase(name, type, selectedDate) {
+      try {
+        await addDoc(collection(db, "reservations"), {
+          name: name,
+          type: type,
+          date: selectedDate,
+          timestamp: serverTimestamp()
+        });
+        console.log("Firebase に保存完了！");
+      } catch (e) {
+        console.error("Firebase 保存エラー:", e);
+      }
+    }
   </script>
 </body>
 </html>
