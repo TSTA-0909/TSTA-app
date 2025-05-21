@@ -2,20 +2,33 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>予約設定（管理者用）</title>
+  <title>管理者予約設定</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
+    .calendar-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+    table { border-collapse: collapse; }
+    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; }
+    td.today { background: #ffe4b2; }
+    td.selected { background: #add8e6; }
+    td.available { background: #c0ffc0; }
+    td.disabled { background: #eee; color: #aaa; cursor: default; }
+  </style>
 </head>
 <body>
-  <h1>予約日設定</h1>
-  <label>日付（例：2025-06-10）<input type="text" id="date"></label><br>
-  <label>初心者上限 <input type="number" id="beginner" value="2"></label><br>
-  <label>経験者上限 <input type="number" id="experienced" value="2"></label><br>
+  <h1>管理者：予約日設定</h1>
+
+  <div class="calendar-container" id="calendarArea"></div>
+
+  <h3>選択日：<span id="selectedDateDisplay">未選択</span></h3>
+  <label>初心者上限：<input type="number" id="beginner" value="2"></label><br>
+  <label>経験者上限：<input type="number" id="experienced" value="2"></label><br>
   <button onclick="saveConfig()">予約可能にする</button>
 
   <p id="status"></p>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
-    import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyC3pcdWqFwrvokCUyGGJlg_ruQ-6wUSZT8",
@@ -29,12 +42,76 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    let selectedDate = null;
+    let configMap = {};
+
+    async function loadConfigFromFirestore() {
+      const snap = await getDocs(collection(db, "config"));
+      snap.forEach(doc => {
+        configMap[doc.id] = doc.data();
+      });
+    }
+
+    function renderCalendar() {
+      const area = document.getElementById("calendarArea");
+      area.innerHTML = "";
+      const today = new Date();
+
+      for (let m = 0; m < 2; m++) {
+        const date = new Date(today.getFullYear(), today.getMonth() + m, 1);
+        const table = document.createElement("table");
+        const caption = document.createElement("caption");
+        caption.textContent = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+        table.appendChild(caption);
+
+        const head = document.createElement("tr");
+        ["日", "月", "火", "水", "木", "金", "土"].forEach(d => {
+          const th = document.createElement("th");
+          th.textContent = d;
+          head.appendChild(th);
+        });
+        table.appendChild(head);
+
+        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+        let row = document.createElement("tr");
+        for (let i = 0; i < firstDay.getDay(); i++) row.appendChild(document.createElement("td"));
+
+        for (let d = 1; d <= lastDay.getDate(); d++) {
+          const day = new Date(date.getFullYear(), date.getMonth(), d);
+          const dateStr = day.toISOString().split("T")[0];
+          const td = document.createElement("td");
+          td.textContent = d;
+
+          if (dateStr === new Date().toISOString().split("T")[0]) td.classList.add("today");
+          if (configMap[dateStr]) td.classList.add("available");
+
+          td.onclick = () => {
+            selectedDate = dateStr;
+            document.querySelectorAll("td").forEach(td => td.classList.remove("selected"));
+            td.classList.add("selected");
+            document.getElementById("selectedDateDisplay").textContent = selectedDate;
+          };
+
+          row.appendChild(td);
+          if (day.getDay() === 6) {
+            table.appendChild(row);
+            row = document.createElement("tr");
+          }
+        }
+        table.appendChild(row);
+        area.appendChild(table);
+      }
+    }
+
     async function saveConfig() {
-      const date = document.getElementById('date').value;
+      if (!selectedDate) {
+        alert("日付を選択してください");
+        return;
+      }
       const beginner = parseInt(document.getElementById('beginner').value);
       const experienced = parseInt(document.getElementById('experienced').value);
-      if (!date) return alert("日付を入力してください");
-
       const config = {
         enabled: true,
         beginner_limit: beginner,
@@ -42,13 +119,20 @@
       };
 
       try {
-        await setDoc(doc(db, "config", date), config);
-        document.getElementById("status").textContent = `${date} の設定を保存しました`;
+        await setDoc(doc(db, "config", selectedDate), config);
+        document.getElementById("status").textContent = `${selectedDate} の設定を保存しました`;
+        configMap[selectedDate] = config; // 即時反映
+        renderCalendar(); // カレンダー再描画
       } catch (e) {
         console.error("Firestore 保存エラー:", e);
         document.getElementById("status").textContent = `保存に失敗しました`;
       }
     }
+
+    window.onload = async () => {
+      await loadConfigFromFirestore();
+      renderCalendar();
+    };
   </script>
 </body>
 </html>
