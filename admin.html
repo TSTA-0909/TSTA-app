@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理者ページ</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
+    h1 { text-align: center; }
+    .calendar-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+    table { border-collapse: collapse; background: white; }
+    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; }
+    td.today { background: #ffe4b2; }
+    td.selected { background: #90ee90; }
+    .form { margin: 20px auto; padding: 10px; background: white; border-radius: 6px; max-width: 400px; }
+    .form label, .form input { display: block; width: 100%; margin: 5px 0; }
+    .form input[type=number] { width: 100px; }
+    .reservation-list { margin: 20px auto; max-width: 400px; background: white; padding: 10px; border-radius: 6px; }
+    .reservation-list h3 { margin-bottom: 10px; }
+    .reservation-list ul { list-style: none; padding-left: 10px; }
+  </style>
+</head>
+<body>
+  <h1>管理者カレンダー</h1>
+  <div class="calendar-container" id="calendarArea"></div>
+
+  <div class="form">
+    <label>初心者・ブランク有の上限人数：<input type="number" id="beginnerLimit" min="0" value="0"></label>
+    <label>経験者の上限人数：<input type="number" id="experiencedLimit" min="0" value="0"></label>
+    <button onclick="saveConfig()">保存</button>
+  </div>
+
+  <div class="reservation-list" id="reservationList">
+    <h3>予約者一覧（選択日）</h3>
+    <ul id="reservationNames"></ul>
+  </div>
+
+  <script>
+    let selectedDate = null;
+    const monthsToShow = 2;
+
+    function renderCalendars() {
+      const container = document.getElementById('calendarArea');
+      container.innerHTML = '';
+
+      const today = new Date();
+      for (let i = 0; i < monthsToShow; i++) {
+        const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+        container.appendChild(buildCalendar(date));
+      }
+    }
+
+    function buildCalendar(baseDate) {
+      const year = baseDate.getFullYear();
+      const month = baseDate.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+
+      const table = document.createElement('table');
+      const caption = document.createElement('caption');
+      caption.textContent = `${year}年${month + 1}月`;
+      table.appendChild(caption);
+
+      const weekdays = ['日','月','火','水','木','金','土'];
+      const headRow = document.createElement('tr');
+      weekdays.forEach(d => {
+        const th = document.createElement('th'); th.textContent = d; headRow.appendChild(th);
+      });
+      table.appendChild(headRow);
+
+      let row = document.createElement('tr');
+      for (let i = 0; i < firstDay.getDay(); i++) row.appendChild(document.createElement('td'));
+
+      const config = JSON.parse(localStorage.getItem('config') || '{}');
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const day = new Date(year, month, d);
+        const dateStr = `${year}-${(month+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+        const cell = document.createElement('td');
+        cell.textContent = d;
+
+        if (dateStr === todayStr) cell.classList.add('today');
+        if (config[dateStr]?.enabled) cell.classList.add('selected');
+
+        cell.onclick = () => {
+          selectedDate = dateStr;
+          document.querySelectorAll('td').forEach(td => td.classList.remove('selected'));
+          cell.classList.add('selected');
+          showConfig(dateStr);
+          showReservationNames(dateStr);
+        };
+
+        row.appendChild(cell);
+        if (day.getDay() === 6 || d === lastDay.getDate()) {
+          table.appendChild(row);
+          row = document.createElement('tr');
+        }
+      }
+      return table;
+    }
+
+    function saveConfig() {
+      if (!selectedDate) return alert('日付を選んでください');
+      const beginner = parseInt(document.getElementById('beginnerLimit').value || 0);
+      const experienced = parseInt(document.getElementById('experiencedLimit').value || 0);
+      const config = JSON.parse(localStorage.getItem('config') || '{}');
+      config[selectedDate] = { enabled: true, beginner_limit: beginner, experienced_limit: experienced };
+      localStorage.setItem('config', JSON.stringify(config));
+      renderCalendars();
+    }
+
+    function showConfig(dateStr) {
+      const config = JSON.parse(localStorage.getItem('config') || '{}');
+      document.getElementById('beginnerLimit').value = config[dateStr]?.beginner_limit || 0;
+      document.getElementById('experiencedLimit').value = config[dateStr]?.experienced_limit || 0;
+    }
+
+    function showReservationNames(dateStr) {
+      const all = Object.entries(localStorage).filter(([k]) => k.startsWith('res_'));
+      const result = [];
+      all.forEach(([key, val]) => {
+        const res = JSON.parse(val);
+        res.forEach(r => {
+          if (r.date === dateStr) result.push(`${key.replace('res_', '')}（${r.type === 'beginner' ? '初心者' : '経験者'}）`);
+        });
+      });
+      const list = document.getElementById('reservationNames');
+      list.innerHTML = '';
+      result.forEach(name => {
+        const li = document.createElement('li');
+        li.textContent = name;
+        list.appendChild(li);
+      });
+    }
+
+    renderCalendars();
+  </script>
+</body>
+</html>
