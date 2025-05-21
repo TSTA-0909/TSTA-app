@@ -18,6 +18,7 @@
     .form input, .form select, .form button { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
     .reservation-item { background: #e0f7fa; margin: 5px 0; padding: 10px; border-radius: 6px; font-size: 14px; }
     .reservation-item button { float: right; font-size: 12px; }
+    #popup { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #d4edda; color: #155724; padding: 10px 20px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: none; z-index: 1000; }
   </style>
 </head>
 <body>
@@ -25,10 +26,7 @@
   <h2>19:00〜専用／区分選択あり</h2>
 
   <div class="form">
-    <label>名前：
-      <select id="nameSelect"><option value="">-- 名前を選択 --</option></select>
-      <input type="text" id="nameInput" placeholder="新しい名前を入力">
-    </label>
+    <label>名前：<input type="text" id="nameInput" placeholder="名前を入力（次回から自動補完）"></label>
     <label>区分：
       <select id="type">
         <option value="">-- 区分を選択 --</option>
@@ -46,9 +44,18 @@
     <div id="myReservations"></div>
   </div>
 
+  <div id="popup">予約できました！楽しみにしてます✨</div>
+
   <script>
     const monthsToShow = 2;
     let selectedDate = null;
+
+    function showPopup(msg) {
+      const popup = document.getElementById('popup');
+      popup.textContent = msg;
+      popup.style.display = 'block';
+      setTimeout(() => popup.style.display = 'none', 2000);
+    }
 
     function renderCalendars() {
       const container = document.getElementById('calendarArea');
@@ -121,15 +128,15 @@
     }
 
     function registerReservation() {
-      let name = document.getElementById('nameInput').value.trim();
-      const selectedName = document.getElementById('nameSelect').value;
-      if (!name && selectedName) name = selectedName;
+      const name = document.getElementById('nameInput').value.trim();
       const type = document.getElementById('type').value;
 
       if (!name || !type || !selectedDate) {
         alert('名前・区分・日付を選んでください');
         return;
       }
+
+      localStorage.setItem('lastType', type);
 
       const config = JSON.parse(localStorage.getItem('config') || '{}');
       const limit = config[selectedDate]?.[`${type}_limit`] || 0;
@@ -145,6 +152,7 @@
       myRes.push({ date: selectedDate, type, time: '19:00' });
       localStorage.setItem(key, JSON.stringify(myRes));
 
+      showPopup("予約できました！楽しみにしてます✨");
       showMyReservations(name);
       renderCalendars();
     }
@@ -177,22 +185,15 @@
       });
     }
 
-    function loadNameOptions() {
-      const select = document.getElementById('nameSelect');
-      const nameList = Object.keys(localStorage).filter(k => k.startsWith('res_')).map(k => k.replace('res_', ''));
-      select.innerHTML = '<option value="">-- 名前を選択 --</option>';
-      nameList.forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        select.appendChild(opt);
-      });
+    function loadTypeFromMemory() {
+      const type = localStorage.getItem('lastType');
+      if (type) document.getElementById('type').value = type;
     }
 
-    document.getElementById('type').addEventListener('change', renderCalendars);
-
-    loadNameOptions();
-    renderCalendars();
+    window.onload = () => {
+      loadTypeFromMemory();
+      renderCalendars();
+    };
   </script>
 </body>
 </html>
