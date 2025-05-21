@@ -22,7 +22,7 @@
   <h3>選択日：<span id="selectedDateDisplay">未選択</span></h3>
   <label>初心者上限：<input type="number" id="beginner" value="2"></label><br>
   <label>経験者上限：<input type="number" id="experienced" value="2"></label><br>
-  <button onclick="saveConfig()">予約可能にする</button>
+  <button id="saveBtn">予約可能にする</button>
 
   <p id="status"></p>
 
@@ -121,8 +121,8 @@
       try {
         await setDoc(doc(db, "config", selectedDate), config);
         document.getElementById("status").textContent = `${selectedDate} の設定を保存しました`;
-        configMap[selectedDate] = config; // 即時反映
-        renderCalendar(); // カレンダー再描画
+        configMap[selectedDate] = config;
+        renderCalendar();
       } catch (e) {
         console.error("Firestore 保存エラー:", e);
         document.getElementById("status").textContent = `保存に失敗しました`;
@@ -132,6 +132,9 @@
     window.onload = async () => {
       await loadConfigFromFirestore();
       renderCalendar();
+
+      // ✅ イベント登録ここで確実に行う
+      document.getElementById("saveBtn").addEventListener("click", saveConfig);
     };
   </script>
 </body>
