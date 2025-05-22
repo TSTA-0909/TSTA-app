@@ -118,10 +118,10 @@
 
     async function registerReservation() {
       console.log("✅ registerReservation() 実行された");
-      
+
       const name = document.getElementById("nameInput").value.trim();
       const type = document.getElementById("type").value;
-
+      
       if (!name || !type || !selectedDate) {
         alert("名前・区分・日付すべてを入力してください");
         return;
@@ -136,8 +136,9 @@
           timestamp: serverTimestamp()
         });
         showPopup();
+        console.log("✅ Firestoreに予約保存完了");
       } catch (e) {
-        console.error("予約保存エラー:", e);
+        console.error("❌ Firestore 保存エラー:", e);  // 🔴 ここが超重要！
         alert("予約に失敗しました");
       }
     }
