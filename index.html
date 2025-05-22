@@ -38,7 +38,7 @@
       apiKey: "AIzaSyC3pcdWqFwrvokCUyGGJlg_ruQ-6wUSZT8",
       authDomain: "tsta-reserve.firebaseapp.com",
       projectId: "tsta-reserve",
-      storageBucket: "tsta-reserve.firebasestorage.app",
+      storageBucket: "tsta-reserve.appspot.com",  // ✅ 修正済み（正しいURL）
       messagingSenderId: "242251329752",
       appId: "1:242251329752:web:f70718703ba8e35298a7ad"
     };
@@ -58,6 +58,12 @@
     }
 
     function renderCalendar() {
+      const type = document.getElementById("type").value;
+      if (!type) {
+        document.getElementById("calendarArea").innerHTML = "<p>区分を選択してください。</p>";
+        return;
+      }
+
       const area = document.getElementById("calendarArea");
       area.innerHTML = "";
       const today = new Date();
@@ -66,11 +72,11 @@
         const date = new Date(today.getFullYear(), today.getMonth() + m, 1);
         const table = document.createElement("table");
         const caption = document.createElement("caption");
-        caption.textContent = `${date.getFullYear()}年${date.getMonth()+1}月`;
+        caption.textContent = `${date.getFullYear()}年${date.getMonth() + 1}月`;
         table.appendChild(caption);
 
         const head = document.createElement("tr");
-        ["日","月","火","水","木","金","土"].forEach(d => {
+        ["日", "月", "火", "水", "木", "金", "土"].forEach(d => {
           const th = document.createElement("th");
           th.textContent = d;
           head.appendChild(th);
@@ -91,7 +97,6 @@
 
           if (dateStr === new Date().toISOString().split("T")[0]) td.classList.add("today");
 
-          const type = document.getElementById("type").value;
           if (config[dateStr]?.enabled && config[dateStr]?.[`${type}_limit`] > 0) {
             td.classList.add("available");
             td.onclick = () => {
@@ -104,12 +109,11 @@
           }
 
           row.appendChild(td);
-          if (day.getDay() === 6) {
+          if (day.getDay() === 6 || d === lastDay.getDate()) {
             table.appendChild(row);
             row = document.createElement("tr");
           }
         }
-        table.appendChild(row);
         area.appendChild(table);
       }
     }
