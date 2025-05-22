@@ -6,200 +6,33 @@
   <title>予約カレンダー（一般ユーザー）</title>
   <style>
     body { font-family: sans-serif; background: #f9f9f9; padding: 20px; }
-    h1, h2 { text-align: center; }
-    .calendar-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
-    table { border-collapse: collapse; margin: 10px auto; }
-    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; font-size: 14px; cursor: pointer; }
+    .calendar-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; }
     td.today { background: #ffe4b2; }
     td.selected { background: #add8e6; }
     td.disabled { background: #eee; color: #aaa; cursor: default; }
-    td.available { background: #d0f0c0; }
-    .form, .reservations { max-width: 100%; width: 90%; margin: 20px auto; padding: 10px; background: white; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
-    .form input, .form select, .form button { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
-    .reservation-item { background: #e0f7fa; margin: 5px 0; padding: 10px; border-radius: 6px; font-size: 14px; }
-    .reservation-item button { float: right; font-size: 12px; }
-    #popup { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #d4edda; color: #155724; padding: 10px 20px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: none; z-index: 1000; }
+    td.available { background: #c0ffc0; }
+    #popup { display: none; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; z-index: 1000; }
   </style>
 </head>
 <body>
   <h1>予約カレンダー</h1>
-  <h2>19:00〜専用／区分選択あり</h2>
-
-  <div class="form">
-    <label>名前：<input type="text" id="nameInput" placeholder="名前を入力（次回から自動補完）"></label>
-    <label>区分：
-      <select id="type">
-        <option value="">-- 区分を選択 --</option>
-        <option value="beginner">初心者・ブランク有</option>
-        <option value="experienced">経験者</option>
-      </select>
-    </label>
-    <button onclick="registerReservation()">予約する</button>
-  </div>
+  <label>名前：<input type="text" id="nameInput" placeholder="名前"></label>
+  <label>区分：
+    <select id="type">
+      <option value="">-- 選択 --</option>
+      <option value="beginner">初心者・ブランク有</option>
+      <option value="experienced">経験者</option>
+    </select>
+  </label>
+  <button onclick="registerReservation()">予約する</button>
 
   <div class="calendar-container" id="calendarArea"></div>
-
-  <div class="reservations">
-    <h3>あなたの予約一覧</h3>
-    <div id="myReservations"></div>
-  </div>
-
   <div id="popup">予約できました！楽しみにしてます✨</div>
-
-  <script>
-    const monthsToShow = 2;
-    let selectedDate = null;
-
-    function showPopup(msg) {
-      const popup = document.getElementById('popup');
-      popup.textContent = msg;
-      popup.style.display = 'block';
-      setTimeout(() => popup.style.display = 'none', 2000);
-    }
-
-    function renderCalendars() {
-      const container = document.getElementById('calendarArea');
-      container.innerHTML = '';
-
-      const today = new Date();
-      for (let i = 0; i < monthsToShow; i++) {
-        const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-        container.appendChild(buildCalendar(date));
-      }
-    }
-
-    function buildCalendar(baseDate) {
-      const year = baseDate.getFullYear();
-      const month = baseDate.getMonth();
-      const firstDay = new Date(year, month, 1);
-      const lastDay = new Date(year, month + 1, 0);
-
-      const table = document.createElement('table');
-      const caption = document.createElement('caption');
-      caption.textContent = `${year}年${month + 1}月`;
-      table.appendChild(caption);
-      const weekdays = ['日','月','火','水','木','金','土'];
-      const headRow = document.createElement('tr');
-      weekdays.forEach(d => {
-        const th = document.createElement('th'); th.textContent = d; headRow.appendChild(th);
-      });
-      table.appendChild(headRow);
-
-      let row = document.createElement('tr');
-      for (let i = 0; i < firstDay.getDay(); i++) row.appendChild(document.createElement('td'));
-
-      const type = document.getElementById('type')?.value;
-      const config = JSON.parse(localStorage.getItem('config') || '{}');
-      const todayStr = new Date().toISOString().split('T')[0];
-
-      for (let d = 1; d <= lastDay.getDate(); d++) {
-        const day = new Date(year, month, d);
-        const dateStr = `${year}-${(month+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
-        const cell = document.createElement('td');
-        cell.textContent = d;
-
-        if (dateStr === todayStr) cell.classList.add('today');
-
-        if (config[dateStr] && config[dateStr].enabled) {
-          const isAllowed = type && config[dateStr][`${type}_limit`] > 0;
-          if (isAllowed) {
-            cell.classList.add('available');
-            cell.onclick = () => selectDate(dateStr, cell);
-          } else {
-            cell.classList.add('disabled');
-          }
-        } else {
-          cell.classList.add('disabled');
-        }
-
-        row.appendChild(cell);
-        if (day.getDay() === 6 || d === lastDay.getDate()) {
-          table.appendChild(row);
-          row = document.createElement('tr');
-        }
-      }
-      return table;
-    }
-
-    function selectDate(dateStr, cell) {
-      selectedDate = dateStr;
-      document.querySelectorAll('td').forEach(td => td.classList.remove('selected'));
-      cell.classList.add('selected');
-    }
-
-    function registerReservation() {
-      const name = document.getElementById('nameInput').value.trim();
-      const type = document.getElementById('type').value;
-
-      if (!name || !type || !selectedDate) {
-        alert('名前・区分・日付を選んでください');
-        return;
-      }
-
-      localStorage.setItem('lastType', type);
-
-      const config = JSON.parse(localStorage.getItem('config') || '{}');
-      const limit = config[selectedDate]?.[`${type}_limit`] || 0;
-      const allRes = getAllReservations();
-      const todaysRes = allRes.filter(r => r.date === selectedDate && r.type === type);
-      if (todaysRes.length >= limit) {
-        alert('この日の予約上限に達しています');
-        return;
-      }
-
-      const key = `res_${name}`;
-      const myRes = JSON.parse(localStorage.getItem(key) || '[]');
-      myRes.push({ date: selectedDate, type, time: '19:00' });
-      localStorage.setItem(key, JSON.stringify(myRes));
-
-      registerToFirebase(name, type, selectedDate); // 🔥 Firebaseに保存！
-      showPopup("予約できました！楽しみにしてます✨");
-      showMyReservations(name);
-      renderCalendars();
-    }
-
-    function getAllReservations() {
-      return Object.keys(localStorage)
-        .filter(k => k.startsWith('res_'))
-        .flatMap(k => JSON.parse(localStorage.getItem(k) || '[]'));
-    }
-
-    function showMyReservations(name) {
-      const key = `res_${name}`;
-      const list = JSON.parse(localStorage.getItem(key) || '[]');
-      const container = document.getElementById('myReservations');
-      container.innerHTML = '';
-      list.forEach((item, index) => {
-        const div = document.createElement('div');
-        div.className = 'reservation-item';
-        div.textContent = `${item.date}（${item.type === 'beginner' ? '初心者' : '経験者'}）19:00〜`;
-        const cancel = document.createElement('button');
-        cancel.textContent = 'キャンセル';
-        cancel.onclick = () => {
-          list.splice(index, 1);
-          localStorage.setItem(key, JSON.stringify(list));
-          showMyReservations(name);
-          renderCalendars();
-        };
-        div.appendChild(cancel);
-        container.appendChild(div);
-      });
-    }
-
-    function loadTypeFromMemory() {
-      const type = localStorage.getItem('lastType');
-      if (type) document.getElementById('type').value = type;
-    }
-
-    window.onload = () => {
-      loadTypeFromMemory();
-      renderCalendars();
-    };
-  </script>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyC3pcdWqFwrvokCUyGGJlg_ruQ-6wUSZT8",
@@ -213,19 +46,98 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    async function registerToFirebase(name, type, selectedDate) {
-      try {
-        await addDoc(collection(db, "reservations"), {
-          name: name,
-          type: type,
-          date: selectedDate,
-          timestamp: serverTimestamp()
+    let selectedDate = null;
+    let config = {};
+
+    async function loadConfigFromFirestore() {
+      const snap = await getDocs(collection(db, "config"));
+      snap.forEach(doc => {
+        config[doc.id] = doc.data();
+      });
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const area = document.getElementById("calendarArea");
+      area.innerHTML = "";
+      const today = new Date();
+
+      for (let m = 0; m < 2; m++) {
+        const date = new Date(today.getFullYear(), today.getMonth() + m, 1);
+        const table = document.createElement("table");
+        const caption = document.createElement("caption");
+        caption.textContent = `${date.getFullYear()}年${date.getMonth()+1}月`;
+        table.appendChild(caption);
+
+        const head = document.createElement("tr");
+        ["日","月","火","水","木","金","土"].forEach(d => {
+          const th = document.createElement("th");
+          th.textContent = d;
+          head.appendChild(th);
         });
-        console.log("Firebase に保存完了！");
-      } catch (e) {
-        console.error("Firebase 保存エラー:", e);
+        table.appendChild(head);
+
+        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+        let row = document.createElement("tr");
+        for (let i = 0; i < firstDay.getDay(); i++) row.appendChild(document.createElement("td"));
+
+        for (let d = 1; d <= lastDay.getDate(); d++) {
+          const day = new Date(date.getFullYear(), date.getMonth(), d);
+          const dateStr = day.toISOString().split("T")[0];
+          const td = document.createElement("td");
+          td.textContent = d;
+
+          if (dateStr === new Date().toISOString().split("T")[0]) td.classList.add("today");
+
+          const type = document.getElementById("type").value;
+          if (config[dateStr]?.enabled && config[dateStr]?.[`${type}_limit`] > 0) {
+            td.classList.add("available");
+            td.onclick = () => {
+              selectedDate = dateStr;
+              document.querySelectorAll("td").forEach(td => td.classList.remove("selected"));
+              td.classList.add("selected");
+            };
+          } else {
+            td.classList.add("disabled");
+          }
+
+          row.appendChild(td);
+          if (day.getDay() === 6) {
+            table.appendChild(row);
+            row = document.createElement("tr");
+          }
+        }
+        table.appendChild(row);
+        area.appendChild(table);
       }
     }
+
+    async function registerReservation() {
+      const name = document.getElementById("nameInput").value.trim();
+      const type = document.getElementById("type").value;
+      if (!name || !type || !selectedDate) return alert("全ての項目を入力してください");
+
+      await addDoc(collection(db, "reservations"), {
+        name,
+        type,
+        date: selectedDate,
+        time: "19:00",
+        timestamp: serverTimestamp()
+      });
+
+      showPopup();
+    }
+
+    function showPopup() {
+      const popup = document.getElementById("popup");
+      popup.style.display = "block";
+      setTimeout(() => popup.style.display = "none", 2000);
+    }
+
+    window.onload = loadConfigFromFirestore;
+    document.getElementById("type").addEventListener("change", renderCalendar);
   </script>
 </body>
 </html>
