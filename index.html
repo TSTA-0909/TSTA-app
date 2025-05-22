@@ -149,7 +149,7 @@
       setTimeout(() => popup.style.display = "none", 2000);
     }
 
-    wwindow.onload = loadConfigFromFirestore;
+    window.onload = loadConfigFromFirestore;
     document.getElementById("type").addEventListener("change", renderCalendar);
     document.getElementById("reserveBtn").addEventListener("click", registerReservation);
   </script>
