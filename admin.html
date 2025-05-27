@@ -2,18 +2,19 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>管理者予約設定</title>
+  <title>管理者：予約日設定</title>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
     .calendar-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
     table { border-collapse: collapse; }
-    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; transition: transform 0.2s; }
+    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; }
     td.today { background: #ffe4b2; }
     td.selected { background: #add8e6; transform: scale(1.2); font-weight: bold; }
     td.available { background: #c0ffc0; }
     td.disabled { background: #eee; color: #aaa; cursor: default; }
-    #reservationsList { margin-top: 20px; padding: 10px; background: white; border-radius: 6px; border: 1px solid #ccc; max-width: 400px; }
-    .name-item { margin: 5px 0; }
+    .section { margin-top: 20px; background: white; padding: 10px; border-radius: 6px; max-width: 500px; }
+    .name-list div { padding: 4px 0; }
+    .name-list button { margin-left: 10px; }
   </style>
 </head>
 <body>
@@ -21,19 +22,25 @@
 
   <div class="calendar-container" id="calendarArea"></div>
 
-  <h3>選択日：<span id="selectedDateDisplay">未選択</span></h3>
-  <label>初心者上限：<input type="number" id="beginner" value="2"></label><br>
-  <label>経験者上限：<input type="number" id="experienced" value="2"></label><br>
-  <button id="saveBtn">予約可能にする</button>
+  <div class="section">
+    <h3>選択日：<span id="selectedDateDisplay">未選択</span></h3>
+    <label>初心者上限：<input type="number" id="beginner" value="2"></label><br>
+    <label>経験者上限：<input type="number" id="experienced" value="2"></label><br>
+    <button id="saveBtn">予約可能にする</button>
+    <p id="status"></p>
+  </div>
 
-  <p id="status"></p>
-
-  <h3 id="resHeader" style="display:none;">この日の予約者：</h3>
-  <div id="reservationsList"></div>
+  <div class="section" id="reservationInfo" style="display:none;">
+    <h3>🔎 参加者一覧（選択日）</h3>
+    <div id="beginnerList"></div>
+    <div id="experiencedList"></div>
+  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
+    import {
+      getFirestore, doc, setDoc, getDocs, collection, deleteDoc, query, where
+    } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyC3pcdWqFwrvokCUyGGJlg_ruQ-6wUSZT8",
@@ -57,11 +64,6 @@
       });
     }
 
-      function formatDate(date) {
-        const jst = new Date(date.getTime() + (9 * 60 * 60 * 1000));
-        return jst.toISOString().split("T")[0];
-      }
-      
     function renderCalendar() {
       const area = document.getElementById("calendarArea");
       area.innerHTML = "";
@@ -90,19 +92,19 @@
 
         for (let d = 1; d <= lastDay.getDate(); d++) {
           const day = new Date(date.getFullYear(), date.getMonth(), d);
-          const dateStr = formatDate(day);
+          const dateStr = day.toISOString().split("T")[0];
           const td = document.createElement("td");
           td.textContent = d;
 
-          if (dateStr === formatDate(new Date())) td.classList.add("today");
+          if (dateStr === new Date().toISOString().split("T")[0]) td.classList.add("today");
           if (configMap[dateStr]) td.classList.add("available");
 
-          td.onclick = async () => {
+          td.onclick = () => {
             selectedDate = dateStr;
-            document.querySelectorAll("td").forEach(cell => cell.classList.remove("selected"));
+            document.querySelectorAll("td").forEach(td => td.classList.remove("selected"));
             td.classList.add("selected");
             document.getElementById("selectedDateDisplay").textContent = selectedDate;
-            await loadReservations(selectedDate);
+            loadReservations(dateStr);
           };
 
           row.appendChild(td);
@@ -111,7 +113,6 @@
             row = document.createElement("tr");
           }
         }
-
         table.appendChild(row);
         area.appendChild(table);
       }
@@ -135,39 +136,37 @@
         document.getElementById("status").textContent = `${selectedDate} の設定を保存しました`;
         configMap[selectedDate] = config;
         renderCalendar();
-        await loadReservations(selectedDate);
       } catch (e) {
         console.error("Firestore 保存エラー:", e);
         document.getElementById("status").textContent = `保存に失敗しました`;
       }
     }
 
-    async function loadReservations(date) {
-      const resContainer = document.getElementById("reservationsList");
-      const resHeader = document.getElementById("resHeader");
-      resContainer.innerHTML = "";
-      resHeader.style.display = "block";
+    async function loadReservations(dateStr) {
+      const q = query(collection(db, "reservations"), where("date", "==", dateStr));
+      const snapshot = await getDocs(q);
 
-      try {
-        const q = query(collection(db, "reservations"), where("date", "==", date));
-        const snap = await getDocs(q);
+      const beginner = [], experienced = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const entry = { ...data, id: doc.id };
+        if (data.type === "beginner") beginner.push(entry);
+        else if (data.type === "experienced") experienced.push(entry);
+      });
 
-        if (snap.empty) {
-          resContainer.textContent = "この日の予約はまだありません。";
-          return;
-        }
+      const beginnerDiv = document.getElementById("beginnerList");
+      const experiencedDiv = document.getElementById("experiencedList");
+      const wrapper = document.getElementById("reservationInfo");
 
-        snap.forEach(doc => {
-          const data = doc.data();
-          const div = document.createElement("div");
-          div.className = "name-item";
-          div.textContent = `${data.name}（${data.type === "beginner" ? "初心者" : "経験者"}）`;
-          resContainer.appendChild(div);
-        });
-      } catch (e) {
-        console.error("読み込みエラー:", e);
-        resContainer.textContent = "予約データの取得に失敗しました。";
-      }
+      wrapper.style.display = "block";
+      beginnerDiv.innerHTML = `<h4>初心者（${beginner.length}人）</h4>` + beginner.map(p => `<div>${p.name} <button onclick="cancel('${p.id}')">キャンセル</button></div>`).join("");
+      experiencedDiv.innerHTML = `<h4>経験者（${experienced.length}人）</h4>` + experienced.map(p => `<div>${p.name} <button onclick="cancel('${p.id}')">キャンセル</button></div>`).join("");
+    }
+
+    window.cancel = async function(id) {
+      if (!confirm("本当にキャンセルしますか？")) return;
+      await deleteDoc(doc(db, "reservations", id));
+      loadReservations(selectedDate);
     }
 
     window.onload = async () => {
