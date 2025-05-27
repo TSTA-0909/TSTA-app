@@ -9,9 +9,10 @@
     table { border-collapse: collapse; }
     th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; }
     td.today { background: #ffe4b2; }
-    td.selected { background: #add8e6; }
+    td.selected { background: #add8e6; transform: scale(1.2); font-weight: bold; }
     td.available { background: #c0ffc0; }
     td.disabled { background: #eee; color: #aaa; cursor: default; }
+    .reservation-list { margin-top: 20px; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 6px; max-width: 300px; }
   </style>
 </head>
 <body>
@@ -26,9 +27,14 @@
 
   <p id="status"></p>
 
+  <div class="reservation-list" id="reservationList">
+    <h3>予約者一覧</h3>
+    <div id="namesArea">※ 日付を選択すると表示されます</div>
+  </div>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyC3pcdWqFwrvokCUyGGJlg_ruQ-6wUSZT8",
@@ -50,6 +56,26 @@
       snap.forEach(doc => {
         configMap[doc.id] = doc.data();
       });
+    }
+
+    async function fetchReservations(dateStr) {
+      const q = query(collection(db, "reservations"), where("date", "==", dateStr));
+      const snap = await getDocs(q);
+      return snap.docs.map(doc => doc.data().name || "（名無し）");
+    }
+
+    async function displayReservations(dateStr) {
+      const namesArea = document.getElementById("namesArea");
+      namesArea.innerHTML = "読み込み中...";
+
+      const names = await fetchReservations(dateStr);
+      if (names.length === 0) {
+        namesArea.innerHTML = `<strong>${dateStr}</strong>：予約者なし`;
+      } else {
+        namesArea.innerHTML = `<strong>${dateStr}</strong> の予約者一覧：<ul style="padding-left: 20px;">` +
+          names.map(name => `<li>${name}</li>`).join("") +
+          "</ul>";
+      }
     }
 
     function renderCalendar() {
@@ -87,11 +113,12 @@
           if (dateStr === new Date().toISOString().split("T")[0]) td.classList.add("today");
           if (configMap[dateStr]) td.classList.add("available");
 
-          td.onclick = () => {
+          td.onclick = async () => {
             selectedDate = dateStr;
             document.querySelectorAll("td").forEach(td => td.classList.remove("selected"));
             td.classList.add("selected");
             document.getElementById("selectedDateDisplay").textContent = selectedDate;
+            await displayReservations(dateStr);
           };
 
           row.appendChild(td);
@@ -100,6 +127,7 @@
             row = document.createElement("tr");
           }
         }
+
         table.appendChild(row);
         area.appendChild(table);
       }
@@ -132,8 +160,6 @@
     window.onload = async () => {
       await loadConfigFromFirestore();
       renderCalendar();
-
-      // ✅ イベント登録ここで確実に行う
       document.getElementById("saveBtn").addEventListener("click", saveConfig);
     };
   </script>
