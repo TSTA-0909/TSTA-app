@@ -1,3 +1,4 @@
+<!-- コードは長いため、スクロールで確認できます -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -7,12 +8,15 @@
   <style>
     body { font-family: sans-serif; background: #f9f9f9; padding: 20px; }
     .calendar-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; }
+    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; transition: transform 0.2s; }
     td.today { background: #ffe4b2; }
-    td.selected { background: #add8e6; }
+    td.selected { background: #add8e6; transform: scale(1.2); }
     td.disabled { background: #eee; color: #aaa; cursor: default; }
     td.available { background: #c0ffc0; }
     #popup { display: none; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; z-index: 1000; }
+    .reservation-list { margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 5px; }
+    .reservation-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    .reservation-item button { font-size: 12px; }
   </style>
 </head>
 <body>
@@ -31,9 +35,17 @@
   <div class="calendar-container" id="calendarArea"></div>
   <div id="popup">予約できました！楽しみにしてます✨</div>
 
+  <div class="reservation-list">
+    <h3>あなたの予約一覧</h3>
+    <div id="reservationList"></div>
+  </div>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
-    import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
+    import {
+      getFirestore, collection, getDocs, addDoc,
+      serverTimestamp, query, where, deleteDoc, doc
+    } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyC3pcdWqFwrvokCUyGGJlg_ruQ-6wUSZT8",
@@ -68,7 +80,7 @@
         const date = new Date(today.getFullYear(), today.getMonth() + m, 1);
         const table = document.createElement("table");
         const caption = document.createElement("caption");
-        caption.textContent = `${date.getFullYear()}年${date.getMonth()+1}月`;
+        caption.textContent = `${date.getFullYear()}年${date.getMonth() + 1}月`;
         table.appendChild(caption);
 
         const head = document.createElement("tr");
@@ -81,7 +93,6 @@
 
         const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
         const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-
         let row = document.createElement("tr");
         for (let i = 0; i < firstDay.getDay(); i++) row.appendChild(document.createElement("td"));
 
@@ -117,30 +128,23 @@
     }
 
     async function registerReservation() {
-      console.log("✅ registerReservation() 実行された");
-
       const name = document.getElementById("nameInput").value.trim();
       const type = document.getElementById("type").value;
-      
       if (!name || !type || !selectedDate) {
-        alert("名前・区分・日付すべてを入力してください");
+        alert("名前・区分・日付をすべて入力してください");
         return;
       }
 
-      try {
-        await addDoc(collection(db, "reservations"), {
-          name,
-          type,
-          date: selectedDate,
-          time: "19:00",
-          timestamp: serverTimestamp()
-        });
-        showPopup();
-        console.log("✅ Firestoreに予約保存完了");
-      } catch (e) {
-        console.error("❌ Firestore 保存エラー:", e);  // 🔴 ここが超重要！
-        alert("予約に失敗しました");
-      }
+      await addDoc(collection(db, "reservations"), {
+        name,
+        type,
+        date: selectedDate,
+        time: "19:00",
+        timestamp: serverTimestamp()
+      });
+
+      showPopup();
+      loadUserReservations(name);
     }
 
     function showPopup() {
@@ -149,9 +153,33 @@
       setTimeout(() => popup.style.display = "none", 2000);
     }
 
-    window.onload = loadConfigFromFirestore;
+    async function loadUserReservations(name) {
+      const listDiv = document.getElementById("reservationList");
+      listDiv.innerHTML = "";
+      const q = query(collection(db, "reservations"), where("name", "==", name));
+      const snap = await getDocs(q);
+      snap.forEach(res => {
+        const data = res.data();
+        const div = document.createElement("div");
+        div.className = "reservation-item";
+        div.innerHTML = `${data.date}（${data.type === "beginner" ? "初心者" : "経験者"}） <button>キャンセル</button>`;
+        div.querySelector("button").onclick = async () => {
+          await deleteDoc(doc(db, "reservations", res.id));
+          loadUserReservations(name);
+          loadConfigFromFirestore();
+        };
+        listDiv.appendChild(div);
+      });
+    }
+
     document.getElementById("type").addEventListener("change", renderCalendar);
     document.getElementById("reserveBtn").addEventListener("click", registerReservation);
+    document.getElementById("nameInput").addEventListener("change", (e) => {
+      const name = e.target.value.trim();
+      if (name) loadUserReservations(name);
+    });
+
+    window.onload = loadConfigFromFirestore;
   </script>
 </body>
 </html>
