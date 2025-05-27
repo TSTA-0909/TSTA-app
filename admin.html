@@ -32,8 +32,8 @@
 
   <div class="section" id="reservationInfo" style="display:none;">
     <h3>🔎 参加者一覧（選択日）</h3>
-    <div id="beginnerList"></div>
-    <div id="experiencedList"></div>
+    <div id="beginnerList" class="name-list"></div>
+    <div id="experiencedList" class="name-list"></div>
   </div>
 
   <script type="module">
@@ -56,6 +56,12 @@
 
     let selectedDate = null;
     let configMap = {};
+
+    // JST日付に変換
+    function formatDate(date) {
+      const jst = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+      return jst.toISOString().split("T")[0];
+    }
 
     async function loadConfigFromFirestore() {
       const snap = await getDocs(collection(db, "config"));
@@ -92,11 +98,12 @@
 
         for (let d = 1; d <= lastDay.getDate(); d++) {
           const day = new Date(date.getFullYear(), date.getMonth(), d);
-          const dateStr = day.toISOString().split("T")[0];
+          const dateStr = formatDate(day); // JSTに変換
+
           const td = document.createElement("td");
           td.textContent = d;
 
-          if (dateStr === new Date().toISOString().split("T")[0]) td.classList.add("today");
+          if (dateStr === formatDate(new Date())) td.classList.add("today");
           if (configMap[dateStr]) td.classList.add("available");
 
           td.onclick = () => {
@@ -113,6 +120,7 @@
             row = document.createElement("tr");
           }
         }
+
         table.appendChild(row);
         area.appendChild(table);
       }
