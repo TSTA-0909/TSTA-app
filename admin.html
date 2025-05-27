@@ -57,10 +57,11 @@
       });
     }
 
-    function formatDate(date) {
-      return date.toLocaleDateString('sv-SE'); // YYYY-MM-DD形式
-    }
-
+      function formatDate(date) {
+        const jst = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+        return jst.toISOString().split("T")[0];
+      }
+      
     function renderCalendar() {
       const area = document.getElementById("calendarArea");
       area.innerHTML = "";
