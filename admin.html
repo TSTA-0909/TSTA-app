@@ -1,18 +1,19 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>管理者予約設定</title>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
     .calendar-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
     table { border-collapse: collapse; }
-    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; }
+    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; transition: transform 0.2s; }
     td.today { background: #ffe4b2; }
     td.selected { background: #add8e6; transform: scale(1.2); font-weight: bold; }
     td.available { background: #c0ffc0; }
     td.disabled { background: #eee; color: #aaa; cursor: default; }
-    .reservation-list { margin-top: 20px; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 6px; max-width: 300px; }
+    #reservationsList { margin-top: 20px; padding: 10px; background: white; border-radius: 6px; border: 1px solid #ccc; max-width: 400px; }
+    .name-item { margin: 5px 0; }
   </style>
 </head>
 <body>
@@ -27,10 +28,8 @@
 
   <p id="status"></p>
 
-  <div class="reservation-list" id="reservationList">
-    <h3>予約者一覧</h3>
-    <div id="namesArea">※ 日付を選択すると表示されます</div>
-  </div>
+  <h3 id="resHeader" style="display:none;">この日の予約者：</h3>
+  <div id="reservationsList"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
@@ -58,24 +57,8 @@
       });
     }
 
-    async function fetchReservations(dateStr) {
-      const q = query(collection(db, "reservations"), where("date", "==", dateStr));
-      const snap = await getDocs(q);
-      return snap.docs.map(doc => doc.data().name || "（名無し）");
-    }
-
-    async function displayReservations(dateStr) {
-      const namesArea = document.getElementById("namesArea");
-      namesArea.innerHTML = "読み込み中...";
-
-      const names = await fetchReservations(dateStr);
-      if (names.length === 0) {
-        namesArea.innerHTML = `<strong>${dateStr}</strong>：予約者なし`;
-      } else {
-        namesArea.innerHTML = `<strong>${dateStr}</strong> の予約者一覧：<ul style="padding-left: 20px;">` +
-          names.map(name => `<li>${name}</li>`).join("") +
-          "</ul>";
-      }
+    function formatDate(date) {
+      return date.toLocaleDateString('sv-SE'); // YYYY-MM-DD形式
     }
 
     function renderCalendar() {
@@ -106,19 +89,19 @@
 
         for (let d = 1; d <= lastDay.getDate(); d++) {
           const day = new Date(date.getFullYear(), date.getMonth(), d);
-          const dateStr = day.toISOString().split("T")[0];
+          const dateStr = formatDate(day);
           const td = document.createElement("td");
           td.textContent = d;
 
-          if (dateStr === new Date().toISOString().split("T")[0]) td.classList.add("today");
+          if (dateStr === formatDate(new Date())) td.classList.add("today");
           if (configMap[dateStr]) td.classList.add("available");
 
           td.onclick = async () => {
             selectedDate = dateStr;
-            document.querySelectorAll("td").forEach(td => td.classList.remove("selected"));
+            document.querySelectorAll("td").forEach(cell => cell.classList.remove("selected"));
             td.classList.add("selected");
             document.getElementById("selectedDateDisplay").textContent = selectedDate;
-            await displayReservations(dateStr);
+            await loadReservations(selectedDate);
           };
 
           row.appendChild(td);
@@ -151,9 +134,38 @@
         document.getElementById("status").textContent = `${selectedDate} の設定を保存しました`;
         configMap[selectedDate] = config;
         renderCalendar();
+        await loadReservations(selectedDate);
       } catch (e) {
         console.error("Firestore 保存エラー:", e);
         document.getElementById("status").textContent = `保存に失敗しました`;
+      }
+    }
+
+    async function loadReservations(date) {
+      const resContainer = document.getElementById("reservationsList");
+      const resHeader = document.getElementById("resHeader");
+      resContainer.innerHTML = "";
+      resHeader.style.display = "block";
+
+      try {
+        const q = query(collection(db, "reservations"), where("date", "==", date));
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+          resContainer.textContent = "この日の予約はまだありません。";
+          return;
+        }
+
+        snap.forEach(doc => {
+          const data = doc.data();
+          const div = document.createElement("div");
+          div.className = "name-item";
+          div.textContent = `${data.name}（${data.type === "beginner" ? "初心者" : "経験者"}）`;
+          resContainer.appendChild(div);
+        });
+      } catch (e) {
+        console.error("読み込みエラー:", e);
+        resContainer.textContent = "予約データの取得に失敗しました。";
       }
     }
 
