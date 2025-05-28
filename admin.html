@@ -23,6 +23,13 @@
   <div class="calendar-container" id="calendarArea"></div>
 
   <div class="section">
+    <h3>📢 お知らせ管理</h3>
+    <textarea id="noticeInput" rows="3" style="width: 100%;"></textarea><br>
+    <button id="saveNoticeBtn">お知らせを保存</button>
+    <p id="noticeStatus"></p>
+  </div>
+
+  <div class="section">
     <h3>選択日：<span id="selectedDateDisplay">未選択</span></h3>
     <label>初心者上限：<input type="number" id="beginner" value="2"></label><br>
     <label>経験者上限：<input type="number" id="experienced" value="2"></label><br>
@@ -138,6 +145,16 @@
         beginner_limit: beginner,
         experienced_limit: experienced
       };
+    async function saveNotice() {
+      const text = document.getElementById("noticeInput").value;
+      try {
+        await setDoc(doc(db, "config", "notice"), { text });
+        document.getElementById("noticeStatus").textContent = "お知らせを保存しました";
+      } catch (e) {
+        console.error("お知らせ保存エラー:", e);
+        document.getElementById("noticeStatus").textContent = "保存に失敗しました";
+      }
+    }
 
       try {
         await setDoc(doc(db, "config", selectedDate), config);
@@ -181,7 +198,19 @@
       await loadConfigFromFirestore();
       renderCalendar();
       document.getElementById("saveBtn").addEventListener("click", saveConfig);
+      document.getElementById("saveNoticeBtn").addEventListener("click", saveNotice);
+
+  // 🔔 お知らせ読み込み
+      try {
+        const docSnap = await getDoc(doc(db, "config", "notice"));
+        if (docSnap.exists()) {
+          document.getElementById("noticeInput").value = docSnap.data().text || "";
+        }
+      } catch (e) {
+        console.error("お知らせ読み込み失敗:", e);
+      }
     };
+
   </script>
 </body>
 </html>
