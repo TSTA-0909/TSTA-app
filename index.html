@@ -1,50 +1,40 @@
-<!-- コードは長いため、スクロールで確認できます -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>予約カレンダー（一般ユーザー）</title>
+  <meta charset="UTF-8">
+  <title>予約ページ</title>
   <style>
-    body { font-family: sans-serif; background: #f9f9f9; padding: 20px; }
-    .calendar-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; transition: transform 0.2s; }
+    body { font-family: sans-serif; background: #f0f0f0; padding: 20px; }
+    .calendar-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-bottom: 20px; }
+    table { border-collapse: collapse; }
+    th, td { width: 36px; height: 36px; border: 1px solid #ccc; text-align: center; cursor: pointer; }
     td.today { background: #ffe4b2; }
-    td.selected { background: #add8e6; transform: scale(1.2); }
-    td.disabled { background: #eee; color: #aaa; cursor: default; }
+    td.selected { background: #add8e6; transform: scale(1.2); font-weight: bold; }
     td.available { background: #c0ffc0; }
-    #popup { display: none; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; z-index: 1000; }
-    .reservation-list { margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 5px; }
-    .reservation-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
-    .reservation-item button { font-size: 12px; }
+    .section { background: white; padding: 10px; border-radius: 6px; margin-bottom: 20px; max-width: 500px; }
+    .reservation-list div { padding: 4px 0; }
+    .reservation-list button { margin-left: 10px; }
+    #noticeBox { background: #fffbe6; border-left: 6px solid #ffd700; padding: 10px; margin: 10px auto; max-width: 500px; }
   </style>
 </head>
 <body>
+
   <h1>予約カレンダー</h1>
 
-  <label>名前：<input type="text" id="nameInput" placeholder="名前を入力" /></label>
-  <label>区分：
-    <select id="type">
-      <option value="">-- 選択 --</option>
-      <option value="beginner">初心者・ブランク有</option>
-      <option value="experienced">経験者</option>
-    </select>
-  </label>
-  <button id="reserveBtn">予約する</button>
-
   <div class="calendar-container" id="calendarArea"></div>
-  <div id="popup">予約できました！楽しみにしてます✨</div>
 
-  <div class="reservation-list">
+  <!-- 🔔 お知らせ -->
+  <div id="noticeBox" style="display:none;"></div>
+
+  <div class="section">
     <h3>あなたの予約一覧</h3>
-    <div id="reservationList"></div>
+    <div id="reservationList" class="reservation-list"></div>
   </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
     import {
-      getFirestore, collection, getDocs, addDoc,
-      serverTimestamp, query, where, deleteDoc, doc
+      getFirestore, collection, getDocs, query, where, deleteDoc, doc, getDoc
     } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -59,22 +49,17 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let selectedDate = null;
-    let config = {};
+    const userName = prompt("あなたの名前を入力してください");
 
-    async function loadConfigFromFirestore() {
-      const snap = await getDocs(collection(db, "config"));
-      snap.forEach(doc => {
-        config[doc.id] = doc.data();
-      });
-      renderCalendar();
+    function formatDate(date) {
+      const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+      return jst.toISOString().split("T")[0];
     }
 
-    function renderCalendar() {
+    function renderCalendar(configMap) {
       const area = document.getElementById("calendarArea");
       area.innerHTML = "";
       const today = new Date();
-      const type = document.getElementById("type").value;
 
       for (let m = 0; m < 2; m++) {
         const date = new Date(today.getFullYear(), today.getMonth() + m, 1);
@@ -84,7 +69,7 @@
         table.appendChild(caption);
 
         const head = document.createElement("tr");
-        ["日","月","火","水","木","金","土"].forEach(d => {
+        ["日", "月", "火", "水", "木", "金", "土"].forEach(d => {
           const th = document.createElement("th");
           th.textContent = d;
           head.appendChild(th);
@@ -93,27 +78,26 @@
 
         const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
         const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
         let row = document.createElement("tr");
-        for (let i = 0; i < firstDay.getDay(); i++) row.appendChild(document.createElement("td"));
+        for (let i = 0; i < firstDay.getDay(); i++) {
+          row.appendChild(document.createElement("td"));
+        }
 
         for (let d = 1; d <= lastDay.getDate(); d++) {
           const day = new Date(date.getFullYear(), date.getMonth(), d);
-          const dateStr = day.toISOString().split("T")[0];
+          const dateStr = formatDate(day);
           const td = document.createElement("td");
           td.textContent = d;
 
-          if (dateStr === new Date().toISOString().split("T")[0]) td.classList.add("today");
+          if (dateStr === formatDate(new Date())) td.classList.add("today");
+          if (configMap[dateStr]) td.classList.add("available");
 
-          if (config[dateStr]?.enabled && config[dateStr]?.[`${type}_limit`] > 0) {
-            td.classList.add("available");
-            td.onclick = () => {
-              selectedDate = dateStr;
-              document.querySelectorAll("td").forEach(cell => cell.classList.remove("selected"));
-              td.classList.add("selected");
-            };
-          } else {
-            td.classList.add("disabled");
-          }
+          td.onclick = () => {
+            document.querySelectorAll("td").forEach(cell => cell.classList.remove("selected"));
+            td.classList.add("selected");
+            reserve(dateStr);
+          };
 
           row.appendChild(td);
           if (day.getDay() === 6) {
@@ -121,65 +105,70 @@
             row = document.createElement("tr");
           }
         }
-
         table.appendChild(row);
         area.appendChild(table);
       }
     }
 
-    async function registerReservation() {
-      const name = document.getElementById("nameInput").value.trim();
-      const type = document.getElementById("type").value;
-      if (!name || !type || !selectedDate) {
-        alert("名前・区分・日付をすべて入力してください");
-        return;
-      }
-
-      await addDoc(collection(db, "reservations"), {
-        name,
-        type,
-        date: selectedDate,
-        time: "19:00",
-        timestamp: serverTimestamp()
-      });
-
-      showPopup();
-      loadUserReservations(name);
+    async function reserve(dateStr) {
+      alert(`${dateStr} に予約を入れる処理（開発中）`);
     }
 
-    function showPopup() {
-      const popup = document.getElementById("popup");
-      popup.style.display = "block";
-      setTimeout(() => popup.style.display = "none", 2000);
-    }
-
-    async function loadUserReservations(name) {
+    async function loadReservations() {
+      const q = query(collection(db, "reservations"), where("name", "==", userName));
+      const snapshot = await getDocs(q);
       const listDiv = document.getElementById("reservationList");
       listDiv.innerHTML = "";
-      const q = query(collection(db, "reservations"), where("name", "==", name));
-      const snap = await getDocs(q);
-      snap.forEach(res => {
-        const data = res.data();
+
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
         const div = document.createElement("div");
-        div.className = "reservation-item";
-        div.innerHTML = `${data.date}（${data.type === "beginner" ? "初心者" : "経験者"}） <button>キャンセル</button>`;
-        div.querySelector("button").onclick = async () => {
-          await deleteDoc(doc(db, "reservations", res.id));
-          loadUserReservations(name);
-          loadConfigFromFirestore();
+        div.textContent = `${data.date}（${data.type === "beginner" ? "初心者" : "経験者"}）`;
+
+        const btn = document.createElement("button");
+        btn.textContent = "キャンセル";
+        btn.onclick = async () => {
+          if (confirm("キャンセルしてもよろしいですか？")) {
+            await deleteDoc(doc(db, "reservations", docSnap.id));
+            loadReservations();
+          }
         };
+
+        div.appendChild(btn);
         listDiv.appendChild(div);
       });
     }
 
-    document.getElementById("type").addEventListener("change", renderCalendar);
-    document.getElementById("reserveBtn").addEventListener("click", registerReservation);
-    document.getElementById("nameInput").addEventListener("change", (e) => {
-      const name = e.target.value.trim();
-      if (name) loadUserReservations(name);
-    });
+    async function loadConfig() {
+      const snap = await getDocs(collection(db, "config"));
+      const map = {};
+      snap.forEach(doc => {
+        if (doc.id !== "notice") map[doc.id] = doc.data();
+      });
+      renderCalendar(map);
+    }
 
-    window.onload = loadConfigFromFirestore;
+    async function loadNotice() {
+      try {
+        const docSnap = await getDoc(doc(db, "config", "notice"));
+        if (docSnap.exists()) {
+          const text = docSnap.data().text || "";
+          const box = document.getElementById("noticeBox");
+          if (text.trim()) {
+            box.innerText = `📢 お知らせ：${text}`;
+            box.style.display = "block";
+          }
+        }
+      } catch (e) {
+        console.error("お知らせ取得エラー:", e);
+      }
+    }
+
+    window.onload = async () => {
+      await loadConfig();
+      await loadReservations();
+      await loadNotice();
+    };
   </script>
 </body>
 </html>
