@@ -16,6 +16,7 @@
     .reservation-list { margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 5px; }
     .reservation-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
     .reservation-item button { font-size: 12px; }
+    .section { margin: 20px auto; max-width: 500px; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 6px; }
   </style>
 </head>
 <body>
@@ -34,12 +35,21 @@
   <div class="calendar-container" id="calendarArea"></div>
   <div id="popup">予約できました！楽しみにしてます✨</div>
 
-  <!-- 📢 お知らせ欄（カレンダーの直後、一覧の上） -->
-  <div class="section" id="noticeSection" style="background: #fffbe6; padding: 10px; margin: 20px auto; max-width: 500px; border: 1px solid #ccc; border-radius: 6px;">
+  <!-- 📢 お知らせ表示 -->
+  <div class="section">
     <h3>📢 お知らせ</h3>
     <p id="noticeText">読み込み中...</p>
   </div>
 
+  <!-- ✉️ コメント送信 -->
+  <div class="section">
+    <h3>✉️ コメントを送る（管理者にのみ届きます）</h3>
+    <textarea id="commentInput" rows="3" style="width: 100%;" placeholder="コメントを入力してください"></textarea><br>
+    <button id="sendCommentBtn">コメント送信</button>
+    <p id="commentStatus"></p>
+  </div>
+
+  <!-- 🗓️ 予約一覧 -->
   <div class="reservation-list">
     <h3>あなたの予約一覧</h3>
     <div id="reservationList"></div>
@@ -177,7 +187,7 @@
       });
     }
 
-    // ✅ お知らせ表示処理
+    // 🔔 お知らせ表示
     async function loadNotice() {
       const noticeRef = doc(db, "config", "notice");
       const noticeSnap = await getDoc(noticeRef);
@@ -189,6 +199,31 @@
         noticeText.textContent = "現在お知らせはありません。";
       }
     }
+
+    // ✉️ コメント送信
+    document.getElementById("sendCommentBtn").addEventListener("click", async () => {
+      const name = document.getElementById("nameInput").value.trim();
+      const comment = document.getElementById("commentInput").value.trim();
+      const status = document.getElementById("commentStatus");
+
+      if (!name || !comment) {
+        status.textContent = "名前とコメントを入力してください";
+        return;
+      }
+
+      try {
+        await addDoc(collection(db, "comments"), {
+          name,
+          comment,
+          timestamp: serverTimestamp()
+        });
+        status.textContent = "コメントを送信しました！";
+        document.getElementById("commentInput").value = "";
+      } catch (e) {
+        console.error("コメント送信エラー:", e);
+        status.textContent = "送信に失敗しました";
+      }
+    });
 
     document.getElementById("type").addEventListener("change", renderCalendar);
     document.getElementById("reserveBtn").addEventListener("click", registerReservation);
