@@ -13,10 +13,10 @@
     td.disabled { background: #eee; color: #aaa; cursor: default; }
     td.available { background: #c0ffc0; }
     #popup { display: none; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; z-index: 1000; }
-    .reservation-list { margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 5px; }
+    .reservation-list, .section { margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 5px; max-width: 500px; margin-left: auto; margin-right: auto; }
     .reservation-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
     .reservation-item button { font-size: 12px; }
-    .section { margin: 20px auto; max-width: 500px; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 6px; }
+    #chatBox { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #fff; }
   </style>
 </head>
 <body>
@@ -35,13 +35,11 @@
   <div class="calendar-container" id="calendarArea"></div>
   <div id="popup">予約できました！楽しみにしてます✨</div>
 
-  <!-- 📢 お知らせ表示 -->
   <div class="section">
     <h3>📢 お知らせ</h3>
     <p id="noticeText">読み込み中...</p>
   </div>
 
-  <!-- ✉️ コメント送信 -->
   <div class="section">
     <h3>✉️ コメントを送る（管理者にのみ届きます）</h3>
     <textarea id="commentInput" rows="3" style="width: 100%;" placeholder="コメントを入力してください"></textarea><br>
@@ -49,7 +47,11 @@
     <p id="commentStatus"></p>
   </div>
 
-  <!-- 🗓️ 予約一覧 -->
+  <div class="section">
+    <h3>💬 管理者とのチャット履歴</h3>
+    <div id="chatBox"></div>
+  </div>
+
   <div class="reservation-list">
     <h3>あなたの予約一覧</h3>
     <div id="reservationList"></div>
@@ -59,7 +61,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
     import {
       getFirestore, collection, getDocs, addDoc, query, where, serverTimestamp,
-      doc, getDoc, deleteDoc
+      doc, getDoc, deleteDoc, onSnapshot
     } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -99,7 +101,7 @@
         table.appendChild(caption);
 
         const head = document.createElement("tr");
-        ["日","月","火","水","木","金","土"].forEach(d => {
+        ["日", "月", "火", "水", "木", "金", "土"].forEach(d => {
           const th = document.createElement("th");
           th.textContent = d;
           head.appendChild(th);
@@ -187,7 +189,6 @@
       });
     }
 
-    // 🔔 お知らせ表示
     async function loadNotice() {
       const noticeRef = doc(db, "config", "notice");
       const noticeSnap = await getDoc(noticeRef);
@@ -200,8 +201,28 @@
       }
     }
 
-    // ✉️ コメント送信
-    document.getElementById("sendCommentBtn").addEventListener("click", async () => {
+    async function setupChat(name) {
+      const chatBox = document.getElementById("chatBox");
+      chatBox.innerHTML = "<p>読み込み中...</p>";
+
+      const q = query(collection(db, "comments"), where("name", "==", name));
+      onSnapshot(q, (snapshot) => {
+        chatBox.innerHTML = "";
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          const div = document.createElement("div");
+          div.style.marginBottom = "8px";
+          div.innerHTML = `
+            ${data.sender === "admin" ? "🛠 管理者" : "👤 あなた"}：
+            ${data.text}
+          `;
+          chatBox.appendChild(div);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+      });
+    }
+
+    async function sendComment() {
       const name = document.getElementById("nameInput").value.trim();
       const comment = document.getElementById("commentInput").value.trim();
       const status = document.getElementById("commentStatus");
@@ -214,8 +235,11 @@
       try {
         await addDoc(collection(db, "comments"), {
           name,
-          comment,
-          timestamp: serverTimestamp()
+          text: comment,
+          sender: "user",
+          timestamp: serverTimestamp(),
+          readByAdmin: false,
+          repliedByAdmin: false
         });
         status.textContent = "コメントを送信しました！";
         document.getElementById("commentInput").value = "";
@@ -223,13 +247,24 @@
         console.error("コメント送信エラー:", e);
         status.textContent = "送信に失敗しました";
       }
+    }
+
+    // イベント登録
+    document.getElementById("reserveBtn").addEventListener("click", registerReservation);
+    document.getElementById("sendCommentBtn").addEventListener("click", sendComment);
+    document.getElementById("commentInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendComment();
+      }
     });
 
-    document.getElementById("type").addEventListener("change", renderCalendar);
-    document.getElementById("reserveBtn").addEventListener("click", registerReservation);
     document.getElementById("nameInput").addEventListener("change", (e) => {
       const name = e.target.value.trim();
-      if (name) loadUserReservations(name);
+      if (name) {
+        loadUserReservations(name);
+        setupChat(name);
+      }
     });
 
     window.onload = () => {
