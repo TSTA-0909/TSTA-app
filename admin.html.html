@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>管理者：予約日設定</title>
+  <style>
+body {
+  font-family: sans-serif;
+  padding: 20px;
+  background: #f0f0f0;
+  margin: 0;
+}
+
+.calendar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+}
+
+table {
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+
+th, td {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #ccc;
+  text-align: center;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+td.today {
+  background: #ffe4b2;
+}
+
+td.selected {
+  background: #add8e6;
+  transform: scale(1.2);
+  font-weight: bold;
+}
+
+td.available {
+  background: #c0ffc0;
+}
+
+td.disabled {
+  background: #eee;
+  color: #aaa;
+  cursor: default;
+}
+
+.section {
+  margin-top: 20px;
+  background: white;
+  padding: 10px;
+  border-radius: 6px;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.name-list div, .comment-box {
+  padding: 6px 0;
+}
+
+.name-list button, .comment-box button {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.comment-box textarea {
+  width: 100%;
+  font-size: 14px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.user-item {
+  padding: 8px;
+  cursor: pointer;
+  border-bottom: 1px solid #ccc;
+}
+
+.user-item:hover {
+  background: #eee;
+}
+
+.chat-message {
+  margin: 6px 0;
+  font-size: 14px;
+}
+
+.chat-message.admin {
+  text-align: right;
+}
+
+.chat-message .sender {
+  font-weight: bold;
+}
+
+.chat-message .text {
+  display: inline-block;
+  margin-left: 6px;
+}
+
+.badge {
+  background: red;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+/* スマホ用レイアウト調整 */
+@media screen and (max-width: 600px) {
+  th, td {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .calendar-container {
+    flex-direction: column;
+  }
+
+  .section {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  textarea, input, button {
+    font-size: 16px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  button {
+    margin-top: 8px;
+  }
+
+  .name-list div {
+    font-size: 15px;
+  }
+}
+  </style>
+</head>
+<body>
+  <h1>管理者：予約日設定</h1>
+  <div class="calendar-container" id="calendarArea"></div>
+
+  <div class="section">
+    <h3>選択日：<span id="selectedDateDisplay">未選択</span></h3>
+    <label>初心者上限：<input type="number" id="beginner" value="2"></label><br>
+    <label>経験者上限：<input type="number" id="experienced" value="2"></label><br>
+    <button id="saveBtn">予約可能にする</button>
+    <p id="status"></p>
+  </div>
+
+  <div class="section">
+    <h3>📢 お知らせ管理</h3>
+    <textarea id="noticeInput" rows="3" style="width: 100%;"></textarea><br>
+    <button id="saveNoticeBtn">お知らせを保存</button>
+    <p id="noticeStatus"></p>
+  </div>
+
+  <div class="section" id="reservationInfo" style="display:none;">
+    <h3>🔎 参加者一覧（選択日）</h3>
+    <div id="beginnerList" class="name-list"></div>
+    <div id="experiencedList" class="name-list"></div>
+  </div>
+
+  <div class="section" id="commentSection">
+    <h3>💬 コメントやり取り</h3>
+    <div id="userList"></div>
+    <hr>
+    <div id="chatBox"></div>
+    <textarea id="replyText" rows="2" placeholder="返信内容を入力"></textarea>
+    <button id="sendReply">返信する</button>
+  </div>
+
+    <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
+    import {
+      getFirestore, doc, setDoc, getDocs, getDoc, addDoc, collection,
+      deleteDoc, query, where, onSnapshot, serverTimestamp, orderBy
+    } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC3pcdWqFwrvokCUyGGJlg_ruQ-6wUSZT8",
+      authDomain: "tsta-reserve.firebaseapp.com",
+      projectId: "tsta-reserve",
+      storageBucket: "tsta-reserve.appspot.com",
+      messagingSenderId: "242251329752",
+      appId: "1:242251329752:web:f70718703ba8e35298a7ad"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    let selectedDate = null;
+    let configMap = {};
+    let selectedUID = null;
+    let selectedName = "";
+
+    const formatDate = (date) => {
+      const jst = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+      return jst.toISOString().split("T")[0];
+    };
+
+    async function loadConfigFromFirestore() {
+      const snap = await getDocs(collection(db, "config"));
+      snap.forEach(doc => configMap[doc.id] = doc.data());
+    }
+
+    function renderCalendar() {
+      const area = document.getElementById("calendarArea");
+      area.innerHTML = "";
+      const today = new Date();
+      for (let m = 0; m < 2; m++) {
+        const date = new Date(today.getFullYear(), today.getMonth() + m, 1);
+        const table = document.createElement("table");
+        const caption = document.createElement("caption");
+        caption.textContent = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+        table.appendChild(caption);
+
+        const head = document.createElement("tr");
+        ["日", "月", "火", "水", "木", "金", "土"].forEach(d => {
+          const th = document.createElement("th");
+          th.textContent = d;
+          head.appendChild(th);
+        });
+        table.appendChild(head);
+
+        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        let row = document.createElement("tr");
+        for (let i = 0; i < firstDay.getDay(); i++) row.appendChild(document.createElement("td"));
+
+        for (let d = 1; d <= lastDay.getDate(); d++) {
+          const day = new Date(date.getFullYear(), date.getMonth(), d);
+          const dateStr = formatDate(day);
+          const td = document.createElement("td");
+          td.textContent = d;
+          if (dateStr === formatDate(new Date())) td.classList.add("today");
+          if (configMap[dateStr]) td.classList.add("available");
+
+          td.onclick = () => {
+            selectedDate = dateStr;
+            document.querySelectorAll("td").forEach(cell => cell.classList.remove("selected"));
+            td.classList.add("selected");
+            document.getElementById("selectedDateDisplay").textContent = selectedDate;
+            loadReservations(dateStr);
+          };
+
+          row.appendChild(td);
+          if (day.getDay() === 6) {
+            table.appendChild(row);
+            row = document.createElement("tr");
+          }
+        }
+
+        table.appendChild(row);
+        area.appendChild(table);
+      }
+    }
+
+    async function loadReservations(dateStr) {
+      const q = query(collection(db, "reservations"), where("date", "==", dateStr));
+      const snapshot = await getDocs(q);
+      const beginner = [], experienced = [];
+      const allReservations = await getDocs(collection(db, "reservations"));
+
+      const counts = {};
+      allReservations.forEach(doc => {
+        const data = doc.data();
+        if (data.name) {
+          counts[data.name] = (counts[data.name] || 0) + 1;
+        }
+      });
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const entry = { ...data, id: doc.id, count: counts[data.name] || 1 };
+        if (data.type === "beginner") beginner.push(entry);
+        else if (data.type === "experienced") experienced.push(entry);
+      });
+
+      document.getElementById("reservationInfo").style.display = "block";
+
+      document.getElementById("beginnerList").innerHTML =
+        `<h4>初心者（${beginner.length}人）</h4>` +
+        beginner.map(p => `<div>${p.name}（${p.count}回） <button onclick="cancel('${p.id}')">キャンセル</button></div>`).join("");
+
+      document.getElementById("experiencedList").innerHTML =
+        `<h4>経験者（${experienced.length}人）</h4>` +
+        experienced.map(p => `<div>${p.name}（${p.count}回） <button onclick="cancel('${p.id}')">キャンセル</button></div>`).join("");
+    }
+
+    window.cancel = async function(id) {
+      if (!confirm("本当にキャンセルしますか？")) return;
+      await deleteDoc(doc(db, "reservations", id));
+      if (selectedDate) loadReservations(selectedDate);
+    };
+
+    async function saveConfig() {
+      if (!selectedDate) return alert("日付を選択してください");
+      const beginner = parseInt(document.getElementById("beginner").value);
+      const experienced = parseInt(document.getElementById("experienced").value);
+      const config = { enabled: true, beginner_limit: beginner, experienced_limit: experienced };
+      try {
+        await setDoc(doc(db, "config", selectedDate), config);
+        configMap[selectedDate] = config;
+        renderCalendar();
+        document.getElementById("status").textContent = "設定を保存しました";
+      } catch (e) {
+        console.error("保存失敗:", e);
+      }
+    }
+
+    async function saveNotice() {
+      const text = document.getElementById("noticeInput").value;
+      try {
+        await setDoc(doc(db, "config", "notice"), { text });
+        document.getElementById("noticeStatus").textContent = "保存しました";
+      } catch (e) {
+        console.error("お知らせ保存エラー:", e);
+      }
+    }
+
+    function setupCommentListener() {
+      const q = query(collection(db, "comments"));
+      onSnapshot(q, (snapshot) => {
+        const latestByUser = {};
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const { uid, name, text, timestamp, readByAdmin, repliedByAdmin, sender } = data;
+          if (!latestByUser[uid] || data.timestamp?.seconds > latestByUser[uid].timestamp?.seconds) {
+            latestByUser[uid] = { name, text, timestamp, uid, readByAdmin, repliedByAdmin, sender };
+          }
+        });
+
+        const userList = document.getElementById("userList");
+        userList.innerHTML = Object.values(latestByUser).sort((a, b) => b.timestamp?.seconds - a.timestamp?.seconds)
+          .map(u => {
+            let badge = "";
+            if (!u.readByAdmin) badge += '<span class="badge">未読</span>';
+            else if (!u.repliedByAdmin && u.sender === "user") badge += '<span class="badge">未返信</span>';
+            return `<div class="user-item" data-uid="${u.uid}" data-name="${u.name}">👤 ${u.name}：「${u.text}」${badge}</div>`;
+          }).join("");
+      });
+
+      document.getElementById("userList").addEventListener("click", (e) => {
+        const div = e.target.closest(".user-item");
+        if (!div) return;
+        selectedUID = div.dataset.uid;
+        selectedName = div.dataset.name;
+        loadChatHistory(selectedUID);
+      });
+    }
+
+    function loadChatHistory(uid) {
+      const q = query(collection(db, "comments"), where("uid", "==", uid), orderBy("timestamp"));
+      onSnapshot(q, (snapshot) => {
+        const chatBox = document.getElementById("chatBox");
+        chatBox.innerHTML = "";
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const div = document.createElement("div");
+          div.className = "chat-message " + (data.sender === "admin" ? "admin" : "user");
+          div.innerHTML = `<span class="sender">${data.sender === "admin" ? "🛠 管理者" : `👤 ${data.name}`}</span><span class="text">${data.text}</span>`;
+          chatBox.appendChild(div);
+        });
+      });
+    }
+
+    document.getElementById("sendReply").addEventListener("click", async () => {
+      const text = document.getElementById("replyText").value.trim();
+      if (!text || !selectedUID) return alert("返信内容とユーザーを選択してください");
+      await addDoc(collection(db, "comments"), {
+        uid: selectedUID,
+        name: selectedName,
+        text,
+        sender: "admin",
+        timestamp: serverTimestamp(),
+        readByAdmin: true,
+        repliedByAdmin: true
+      });
+      document.getElementById("replyText").value = "";
+    });
+
+    window.onload = async () => {
+      await loadConfigFromFirestore();
+      renderCalendar();
+      document.getElementById("saveBtn").addEventListener("click", saveConfig);
+      document.getElementById("saveNoticeBtn").addEventListener("click", saveNotice);
+      setupCommentListener();
+
+      try {
+        const docSnap = await getDoc(doc(db, "config", "notice"));
+        if (docSnap.exists()) {
+          document.getElementById("noticeInput").value = docSnap.data().text || "";
+        }
+      } catch (e) {
+        console.error("お知らせ読み込み失敗:", e);
+      }
+    };
+  </script>
+</body>
+</html>
