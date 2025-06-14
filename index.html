@@ -207,7 +207,7 @@
     if (permission === "granted") {
       try {
         const token = await getToken(messaging, {
-          vapidKey: "★★★ここにVAPIDキーを入力★★★"
+          vapidKey: "BM8rW2VLLsyd1nUjQ9Ja1KpRetUmhHq3cG4ultrCgQqnP296VZOvUDb5YxEfRknGbquZdqFA18Fm6EvtNjqBfqQ"
         });
         if (currentUser) {
           await setDoc(doc(db, "tokens", currentUser.uid), {
