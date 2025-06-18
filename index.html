@@ -190,6 +190,7 @@
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       currentUser = user;
+      console.log("この端末のUID:", user.uid);  // ← ★ これを追加
       await loadConfigFromFirestore();
       await loadNotice();
       const savedName = localStorage.getItem("userName");
