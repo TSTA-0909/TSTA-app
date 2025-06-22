@@ -193,6 +193,12 @@
       console.log("この端末のUID:", user.uid);  // ← ★ これを追加
       await loadConfigFromFirestore();
       await loadNotice();
+      const typeSelect = document.getElementById("type");
+      if (!typeSelect.value) {
+      typeSelect.value = "experienced"; // 初期値として初心者を選択
+    }
+    renderCalendar();
+
       const savedName = localStorage.getItem("userName");
       if (savedName) {
         document.getElementById("nameInput").value = savedName;
@@ -216,6 +222,7 @@
             name: localStorage.getItem("userName") || "",
             timestamp: serverTimestamp()
           });
+          console.log("トークン登録:", token); // ← 追加しておくと開発時に便利
         }
       } catch (e) {
         console.error("トークン取得失敗:", e);
